@@ -8,7 +8,7 @@ local modules = rs.Modules
 local combatModules = modules.Combat
 
 -- Modules
-local localCombatHanderModule = require(combatModules.Local.M1Combat)
+local localCombatHanderModule = require(combatModules.Local:WaitForChild("M1Combat"))
 
 -- Logic Variables
 local localPlayer = players.LocalPlayer
