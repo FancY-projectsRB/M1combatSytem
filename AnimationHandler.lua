@@ -1,7 +1,7 @@
 local module = {}
 local activeAnimations = {} -- Table to store multiple animations
 
-function module.PlayAnim(Animation, Humanoid, onAnimationEnd)
+function module.PlayAnim(Animation : Animation, Humanoid : Humanoid, onAnimationEnd)
 	if not Animation then
 		warn("Animation Not found, Will not play animation")
 		return false
