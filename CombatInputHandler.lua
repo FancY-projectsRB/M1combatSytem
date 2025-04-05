@@ -17,10 +17,14 @@ local localPlayer = players.LocalPlayer
 uis.InputBegan:Connect(function(inp, proc)
 	if proc then print("user is in a game proc event canciling input check")return end
 	localCombatHanderModule.handleInput(inp)
+	
 end)
 
 
-
+uis.InputEnded:Connect(function(inp, proc)
+	if proc then return end
+	localCombatHanderModule.handleInputEnd(inp)
+end)
 
 
 
