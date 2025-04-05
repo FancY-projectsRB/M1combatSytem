@@ -1,5 +1,4 @@
 -- This script runs on the CLINET SERVER
--- this is a module script
 
 -- Game services
 local RunService : RunService = game:GetService("RunService")
@@ -22,6 +21,8 @@ local localPlayer = game.Players.LocalPlayer
 
 -- Events
 local AttackEvent : RemoteFunction = eventsFolder:WaitForChild("M1Attack")
+local BlockEvent : RemoteFunction = eventsFolder.Block
+local UnblockEvent : RemoteFunction = eventsFolder.Unblock
 
 local module = {}
 
@@ -34,6 +35,10 @@ function module.handleInput(rawInp)
 
 	if inputType == Enum.UserInputType.MouseButton1 then
 		updateComboCount()
+	end
+	
+	if rawInp.KeyCode == Enum.KeyCode.F then
+		block()
 	end
 end
 
@@ -107,6 +112,30 @@ function CheckAttack()
 
 	canAttack = true
 	return attackWorked
+end
+
+-- Checks if the player can block
+function block()
+	local canBlock = canBlock()
+
+end
+
+function unblock()
+	local unblocked = UnblockEvent:InvokeServer()
+end
+
+function canBlock()
+	local canBlock = BlockEvent:InvokeServer()
+	return canBlock
+end
+
+function module.handleInputEnd(rawInp)
+	local inputKeycode = rawInp.KeyCode
+
+	-- Stop blocking when F key is released
+	if inputKeycode == Enum.KeyCode.F then
+		unblock()
+	end
 end
 
 return module
