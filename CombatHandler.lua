@@ -1,3 +1,5 @@
+-- This is a server script inside of ServerScriptService
+
 -- Game Services
 local RunService : RunService = game:GetService("RunService")
 local rs  = game:GetService("ReplicatedStorage")
@@ -20,15 +22,20 @@ local knockbackForce = 1.5
 local finalHitKnockbackMULTI = 25
 local stunTimers = {} -- Tracks active stun timers per player
 local stunDuration = 1 -- seconds
-
+local damage = 10
+local blockingDeduction = 2 -- this number will be dived with the base dmg
 -- Remotes
-local AttackEvent : RemoteFunction = eventsFolder.M1Attack --remote function
+local AttackEvent : RemoteFunction = eventsFolder.M1Attack 
+local BlockEvent : RemoteFunction = eventsFolder.Block
+local UnblockEvent : RemoteFunction = eventsFolder.Unblock
 
 -- Attack Animation
 local punch1Anim = animationsFolder.Punch1
 local punch2Anim = animationsFolder.Punch2
 local punch3Anim = animationsFolder.Punch3
 local punch4Anim = animationsFolder.Punch4
+
+local blockAnim = animationsFolder.Block
 
 -- Stun Animation
 local stun1Anim = animationsFolder.Stun1
@@ -53,11 +60,12 @@ local punchSounds = {PunchSFX1,PunchSFX2,PunchSFX3}
 local swingSounds = {SwingSFX1, SwingSFX2, SwingSFX3}
 
 
--- Adds CanAttack attribute to a new player
+-- Adds attributes to the player
 game.Players.PlayerAdded:Connect(function(player)
 	player.CharacterAdded:Connect(function(character)
 		task.wait(0.1)
 		character:SetAttribute("Stunned", false)
+		character:SetAttribute("Blocking", false)
 	end)
 end)
 
@@ -89,6 +97,15 @@ function amiStunned(character: Model)
 		return true
 	end
 	return isStunned
+end
+
+function amiBlocking(character : Model)
+	local isBlocking = character:GetAttribute("Blocking")
+	if isBlocking == nil then
+		warn("No blocking attribute found, defaulting to false")
+		return false
+	end
+	return isBlocking
 end
 
 -- removes player from lists
@@ -126,6 +143,11 @@ AttackEvent.OnServerInvoke = function(player :Player, currentCombo, maxCombo)
 		warn("[AttackEvent] Player is stunned, attack cancelled")
 		return false
 	end
+	if amiBlocking(player.Character) then
+		print("Cant attack while blocking")
+		return false
+	end
+	
 	animationInProgress[player] = true
 	
 	-- Character info
@@ -174,8 +196,13 @@ AttackEvent.OnServerInvoke = function(player :Player, currentCombo, maxCombo)
 				processedParents[targetCharacter] = true
 
 				print("[Hitbox] HIT! Target:", targetCharacter.Name)
-				enemyHumanoid.Health -= 10
-				
+				if not amiBlocking(enemyHumanoid.Parent) then
+					enemyHumanoid.Health -= damage
+				else 
+					print("Hit blocked! decreasing damage dealt")
+					enemyHumanoid.Health -= damage / blockingDeduction
+				end
+					
 				-- Plays feedback via animations,sounds, and cfx
 				animHandler.PlayAnim(stunAnimations[math.random(1, #stunAnimations)], enemyHumanoid)
 				soundModule.PlaySound(soundModule.RandSound(punchSounds), enemyHumanoid.Parent.HumanoidRootPart)
@@ -210,4 +237,35 @@ AttackEvent.OnServerInvoke = function(player :Player, currentCombo, maxCombo)
 	processedParents = {}
 
 	return true -- tells the client to update their combo and run logic
+end
+
+-- determins if the player can block and runs corosponding logic
+BlockEvent.OnServerInvoke = function(player : Player)
+	-- Determains if the character is loaded and if it contains the blocking attribute
+	local character = player.Character
+	if not character then warn("Character not found will not block") return false end
+	local humanoid = character:FindFirstChild("Humanoid")
+	if not humanoid then warn("humanoid not found, will not block") return false end
+	
+	local blockAttribute = character:GetAttribute("Blocking")
+	
+	if blockAttribute == nil then warn("Attribute not found, blocking will not take place") return false end
+	if character:GetAttribute("Stunned") == true then print("Cant block while stunned") return false end
+	
+	--Blocking logic
+	character:SetAttribute("Blocking", true)
+
+	print("player is blocking")
+end
+
+-- handles when the player wants to unblock
+UnblockEvent.OnServerInvoke = function(player : Player)
+	-- Determains if the character is loaded and if it contains the blocking attribute
+	local character = player.Character
+	if not character then warn("Character not found will not block") return false end
+	local blockAttribute = character:GetAttribute("Blocking")
+	if blockAttribute == nil then warn("Attribute not found, blocking will not take place") return false end
+	
+	character:SetAttribute("Blocking", false)
+	print("player is not blocking")
 end
