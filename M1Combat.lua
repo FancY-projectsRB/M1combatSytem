@@ -1,4 +1,5 @@
--- This server runs on thw CLINET
+-- This script runs on the CLINET SERVER
+-- this is a module script
 
 -- Game services
 local RunService : RunService = game:GetService("RunService")
@@ -17,6 +18,7 @@ local startTime = tick() -- do not change
 local isRunning = false -- do not change
 local canAttack = true -- do not change
 local currentComboConection = nil -- do not change
+local localPlayer = game.Players.LocalPlayer
 
 -- Events
 local AttackEvent : RemoteFunction = eventsFolder:WaitForChild("M1Attack")
@@ -38,9 +40,12 @@ end
 -- Increases combo count
 function updateComboCount()
 	if not isRunning then currentComboDuration = maxComboDuration end
-	if canAttack == false then return end
-	hitRegestered()
-	startComboCountdown()
+	if not canAttack then return end
+
+	local attackSuccess = hitRegestered()
+	if attackSuccess then
+		startComboCountdown()
+	end
 end
 
 -- Starts the cooldown before the combo is stopped the resest
@@ -81,18 +86,25 @@ end
 
 -- Increases combo count and increases combo duration
 function hitRegestered()
-	if CheckAttack() then
-	currentCombo += 1
-	currentComboDuration += 1
-	print(currentCombo)
-	--print("increased combo duration by ".. 1 .. "it is now " .. currentComboDuration)
+	if CheckAttack() == true then
+		currentCombo += 1
+		currentComboDuration += 1
+		print(currentCombo)
+		return true
 	end
+	return false
 end
 
--- Fires to Sevrer to see if you can attack or not and fi you can preoceed with logic
+-- Fires to Sevrer to see if you can attack or not and if you can preoceed with logic
 function CheckAttack()
+	if localPlayer:GetAttribute("Stunned") then
+		print("You're stunned, can't attack")
+		return false
+	end
+	
 	canAttack = false
 	local attackWorked = AttackEvent:InvokeServer(currentCombo, maxCombo) --bool/  fires server code to place hitbox and deal dmg to prevent exploits
+
 	canAttack = true
 	return attackWorked
 end
