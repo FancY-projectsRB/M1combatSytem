@@ -37,4 +37,35 @@ function module.PlayAnim(Animation : Animation, Humanoid : Humanoid, onAnimation
 	return true
 end
 
+-- Stop a specific animation if it is active
+function module.StopAnim(Animation : Animation, Humanoid : Humanoid)
+	if not Animation then
+		warn("No animation provided to stop")
+		return false
+	end
+	if not Humanoid then
+		warn("No humanoid provided to stop animation")
+		return false
+	end
+
+	local animator = Humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		warn("No Animator found in Humanoid")
+		return false
+	end
+
+	-- Find and stop the animation if it's currently active
+	for i, track in ipairs(activeAnimations) do
+		if track.Animation == Animation then
+			track:Stop()
+			table.remove(activeAnimations, i)
+			print("Animation stopped: " .. Animation.Name)
+			return true
+		end
+	end
+
+	print("Animation not found in active animations")
+	return false
+end
+
 return module
