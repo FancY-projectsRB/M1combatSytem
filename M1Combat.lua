@@ -23,6 +23,7 @@ local localPlayer = game.Players.LocalPlayer
 local AttackEvent : RemoteFunction = eventsFolder:WaitForChild("M1Attack")
 local BlockEvent : RemoteFunction = eventsFolder.Block
 local UnblockEvent : RemoteFunction = eventsFolder.Unblock
+local DashEvent :RemoteFunction = eventsFolder.Dash
 
 local module = {}
 
@@ -39,6 +40,10 @@ function module.handleInput(rawInp)
 	
 	if rawInp.KeyCode == Enum.KeyCode.F then
 		block()
+	end
+	
+	if rawInp.KeyCode == Enum.KeyCode.Q then
+		dash()
 	end
 end
 
@@ -109,7 +114,6 @@ function CheckAttack()
 	
 	canAttack = false
 	local attackWorked = AttackEvent:InvokeServer(currentCombo, maxCombo) --bool/  fires server code to place hitbox and deal dmg to prevent exploits
-
 	canAttack = true
 	return attackWorked
 end
@@ -136,6 +140,12 @@ function module.handleInputEnd(rawInp)
 	if inputKeycode == Enum.KeyCode.F then
 		unblock()
 	end
+end
+
+function dash()
+	local canDash = DashEvent:InvokeServer()
+	print(canDash)
+	if not canDash then return end
 end
 
 return module
