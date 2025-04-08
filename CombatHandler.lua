@@ -2,7 +2,6 @@
 
 --> Variables <-- 
 -- Game Services
-local RunService : RunService = game:GetService("RunService")
 local rs  = game:GetService("ReplicatedStorage")
 
 -- Folders
@@ -26,22 +25,26 @@ local stunDuration = 1 -- Seconds
 local damage = 10
 local baseWalkspeed = 16
 local blockingDeduction = 2 -- This number will be divided into the base damage
+local dashForce = 20000
+local dashDB = 2 -- seconds before you can dash after a dash
+local dashLength = 0.2 -- this is how long the force will be applied for
+local dashDuration = 0.37 -- determains how long the anim is played for
 
 local maxCombos = {}
 local currentCombos = {}
+local playerCanDash = {}
 
 -- Remotes
 local AttackEvent : RemoteFunction = eventsFolder.M1Attack 
 local BlockEvent : RemoteFunction = eventsFolder.Block
 local UnblockEvent : RemoteFunction = eventsFolder.Unblock
+local DashEvent : RemoteFunction = eventsFolder.Dash
 
 -- Attack Animations
 local punch1Anim = animationsFolder.Punch1
 local punch2Anim = animationsFolder.Punch2
 local punch3Anim = animationsFolder.Punch3
 local punch4Anim = animationsFolder.Punch4
-
-local blockAnim = animationsFolder.Block
 
 -- Stun Animations
 local stun1Anim = animationsFolder.Stun1
@@ -60,6 +63,9 @@ local PunchSFX3 = SoundsFolder.PunchSFX3
 local SwingSFX1 = SoundsFolder.Swing1
 local SwingSFX2 = SoundsFolder.Swing2
 local SwingSFX3 = SoundsFolder.Swing3
+
+-- Slide Anim
+local slideAnim = animationsFolder.Slide
 
 -- List of all sounds
 local punchSounds = {PunchSFX1, PunchSFX2, PunchSFX3}
@@ -138,7 +144,6 @@ BlockEvent.OnServerInvoke = function(player : Player)
 	local character = player.Character
 	if not character then warn("Character not found, will not block") return false end
 	local humanoid = character:FindFirstChild("Humanoid")
-	if not humanoid then warn("Humanoid not found, will not block") return false end
 
 	local blockAttribute = character:GetAttribute("Blocking")
 	if blockAttribute == nil then warn("Attribute not found, blocking will not take place") return false end
@@ -215,7 +220,7 @@ end
 --[[ 
   Plays visual feedback on the enemy character
 ]]
-function EnemyswingFeedback(enemyHumanoid, player, humanoid)
+function EnemyswingFeedback(enemyHumanoid, humanoid)
 	print("Played visual feedback from the enemy player")
 	animHandler.PlayAnim(stunAnimations[math.random(1, #stunAnimations)], enemyHumanoid)
 	soundModule.PlaySound(soundModule.RandSound(punchSounds), enemyHumanoid.Parent.HumanoidRootPart)
@@ -240,10 +245,11 @@ end
 
 --[[ 
   Applies knockback to the enemy based on combo
+  player is the player who is sending the knockback to the other player, this is used to find what values to set the combo to
 ]]
-function applyKnockBack(enemyHumanoid, root, currentCombo, maxCombo)
+function applyKnockBack(enemyHumanoid, root, player)
 	local direction = (enemyHumanoid.Parent.HumanoidRootPart.Position - root.Position)
-	if currentCombo >= maxCombo - 1 then
+	if currentCombos[player] >= maxCombos[player] - 1 then
 		knockbackModule.ApplyKnockback(enemyHumanoid.Parent, direction, knockbackForce * finalHitKnockbackMULTI, 0.3)
 	else
 		knockbackModule.ApplyKnockback(enemyHumanoid.Parent, direction, knockbackForce, 0.3)
@@ -281,8 +287,8 @@ function hitBoxLogic(hitboxPart, player, character)
 					enemyHumanoid:TakeDamage(damage / blockingDeduction)
 				end
 
-				applyKnockBack(enemyHumanoid, character.HumanoidRootPart, currentCombos[player], maxCombos[player])
-				EnemyswingFeedback(enemyHumanoid, player, character)
+				applyKnockBack(enemyHumanoid, character.HumanoidRootPart, player)
+				EnemyswingFeedback(enemyHumanoid, character)
 				stunPlayer(targetCharacter)
 			end
 		end
@@ -326,4 +332,78 @@ function createHitbox(root)
 	part.Color = Color3.new(1, 0, 0.0156863)
 
 	return part
+end
+
+-- Dash System 
+
+--[[
+	Adds the force to the player
+	Disables the ability to dash as you are mid dash using playerCanDash[player]
+	Calls db and allows player to dash again
+	You may use the return for client function but it must return TRUE (slide worked) or FALSE (slide did not work or started)
+]]
+
+DashEvent.OnServerInvoke = function(player: Player)
+	-- Sanity checks
+	if playerCanDash[player] == false then print("player is already dashing") return false end
+	
+	local character = player.Character
+	if not character then warn("Character not found") return false end
+
+	local humanoid = character:FindFirstChild("Humanoid")
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not root then warn("Missing parts") return false end
+
+	if character:GetAttribute("Stunned") == true then return false end
+
+	-- Creates an attachment to apply the force to
+	local attachment = root:FindFirstChild("DashAttachment") or Instance.new("Attachment")
+	attachment.Name = "DashAttachment"
+	attachment.Parent = root
+
+	-- Plays feedback before force to make the feedback play smoother
+	playDashFeedback(humanoid, player)
+
+	-- Create the VectorForce to apply slide force
+	local dashForce = Instance.new("VectorForce")
+	dashForce.Attachment0 = attachment
+	dashForce.RelativeTo = Enum.ActuatorRelativeTo.World 
+	dashForce.Force = root.CFrame.LookVector * 20000 -- Change this value to control dash speed
+	dashForce.Parent = root
+	humanoid.UseJumpPower = true
+	
+	-- Logic DURING dash
+	humanoid.JumpPower = 0 -- disables jumping by setting jump power to 0
+	playerCanDash[player] = false
+
+	-- Removes the force after a short duration and starts the DB and disables anim
+	task.delay(dashLength, function()
+		print("player is done dashing")
+		humanoid.JumpPower = 50 
+		dashForce:Destroy()
+		attachment:Destroy()
+		startDashDB(player)
+		task.wait(dashDuration)
+		animHandler.StopAnim(slideAnim, humanoid)
+	end)
+
+	return true
+end
+
+-- Starts the cooldown and wont be resumed until given time after next cycle using task.delay
+function startDashDB(player)
+	playerCanDash[player] = false
+	task.delay(dashDB, function()
+		print("dash debounce over for " .. player.Name)
+		playerCanDash[player] = true
+	end)
+end
+
+-- Plays dash animation and calls a callback function when it ends to allow another animation to be played on a character
+function playDashFeedback(humanoid, player)
+	animationInProgress[player] = true
+	animHandler.PlayAnim(slideAnim, humanoid, function()
+		print("slide animation done")
+		animationInProgress[player] = false
+	end)
 end
