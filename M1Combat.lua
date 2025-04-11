@@ -19,11 +19,14 @@ local canAttack = true -- do not change
 local currentComboConection = nil -- do not change
 local localPlayer = game.Players.LocalPlayer
 
+local attackProcessedConnection = nil
+
 -- Events
-local AttackEvent : RemoteFunction = eventsFolder:WaitForChild("M1Attack")
-local BlockEvent : RemoteFunction = eventsFolder.Block
-local UnblockEvent : RemoteFunction = eventsFolder.Unblock
-local DashEvent :RemoteFunction = eventsFolder.Dash
+local AttackEvent : RemoteEvent = eventsFolder.M1Attack 
+local AttackProccesedEventReturn : RemoteEvent = eventsFolder.AttackProccesedEventReturn
+local BlockEvent : RemoteEvent = eventsFolder.Block
+local UnblockEvent : RemoteEvent = eventsFolder.Unblock
+local DashEvent : RemoteEvent = eventsFolder.Dash
 
 local module = {}
 
@@ -47,16 +50,6 @@ function module.handleInput(rawInp)
 	end
 end
 
--- Increases combo count
-function updateComboCount()
-	if not isRunning then currentComboDuration = maxComboDuration end
-	if not canAttack then return end
-
-	local attackSuccess = hitRegestered()
-	if attackSuccess then
-		startComboCountdown()
-	end
-end
 
 -- Starts the cooldown before the combo is stopped the resest
 function startComboCountdown()
@@ -96,42 +89,51 @@ end
 
 -- Increases combo count and increases combo duration
 function hitRegestered()
-	if CheckAttack() == true then
-		currentCombo += 1
-		currentComboDuration += 1
-		print(currentCombo)
-		return true
+	AttackEvent:FireServer(currentCombo, maxCombo)
+
+	-- Clear previous connection before creating a new one to prevent memory leaks or multiple connections
+	if attackProcessedConnection then
+		attackProcessedConnection:Disconnect()
 	end
-	return false
+
+	-- Wait for server response on attack processing
+	attackProcessedConnection = AttackProccesedEventReturn.OnClientEvent:Connect(function(sucsess)
+		attackSuccessFlag = sucsess
+		if sucsess then
+			currentCombo += 1
+			currentComboDuration += 1
+			print("Attack success, combo increased to:", currentCombo)
+		end
+	end)
 end
 
--- Fires to Sevrer to see if you can attack or not and if you can preoceed with logic
-function CheckAttack()
-	if localPlayer:GetAttribute("Stunned") then
-		print("You're stunned, can't attack")
-		return false
+-- Updates the combo count if attack is successful
+function updateComboCount()
+	if not isRunning then currentComboDuration = maxComboDuration end
+	if not canAttack then return end
+
+	hitRegestered() -- Fire the attack
+
+	-- Delay until server response is received
+	task.wait(0.1)  -- Adjust this wait time to allow time for the server to respond
+
+	-- Check if attack was successful
+	if attackSuccessFlag then
+		startComboCountdown()
 	end
-	
-	canAttack = false
-	local attackWorked = AttackEvent:InvokeServer(currentCombo, maxCombo) --bool/  fires server code to place hitbox and deal dmg to prevent exploits
-	canAttack = true
-	return attackWorked
 end
+
 
 -- Checks if the player can block
 function block()
-	local canBlock = canBlock()
-
+	BlockEvent:FireServer()
 end
 
 function unblock()
-	local unblocked = UnblockEvent:InvokeServer()
+	 UnblockEvent:FireServer()
 end
 
-function canBlock()
-	local canBlock = BlockEvent:InvokeServer()
-	return canBlock
-end
+
 
 function module.handleInputEnd(rawInp)
 	local inputKeycode = rawInp.KeyCode
@@ -143,9 +145,7 @@ function module.handleInputEnd(rawInp)
 end
 
 function dash()
-	local canDash = DashEvent:InvokeServer()
-	print(canDash)
-	if not canDash then return end
+	DashEvent:FireServer()
 end
 
 return module
