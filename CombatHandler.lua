@@ -1,6 +1,6 @@
 -- This is a server script inside of ServerScriptService
-
 --> Variables <-- 
+
 -- Game Services
 local rs  = game:GetService("ReplicatedStorage")
 
@@ -29,7 +29,6 @@ local soundModule = safeRequire(modules:WaitForChild("SoundHandler"))
 local VfxModule = safeRequire(modules:WaitForChild("VfxHandler"))
 local knockbackModule = safeRequire(modules:WaitForChild("SimpleKnockback"))
 
-
 -- Logic Variables
 local animationInProgress = {} -- Do not change
 local knockbackForce = 1.5
@@ -39,10 +38,12 @@ local stunDuration = 1 -- Seconds
 local damage = 10
 local baseWalkspeed = 16
 local blockingDeduction = 2 -- This number will be divided into the base damage
-local dashForce = 150
+local dashForce = 19000
 local dashDB = 2 -- seconds before you can dash after a dash
 local dashLength = 0.2 -- this is how long the force will be applied for
 local dashDuration = 0.37 -- determains how long the anim is played for
+local HitboxSize = Vector3.new(11, 8, 6)
+
 
 local maxCombos = {}
 local currentCombos = {}
@@ -85,12 +86,8 @@ local slideAnim = animationsFolder.Slide
 -- List of all sounds
 local punchSounds = {PunchSFX1, PunchSFX2, PunchSFX3}
 local swingSounds = {SwingSFX1, SwingSFX2, SwingSFX3}
---> Variables END <--
-
-
 
  --  Player Setup
-
 
 -- uses :FireClient() to tell client if attack was processed to increase combo cunt and run other logic
 local function sendAttackProcessed(player, status)
@@ -125,7 +122,10 @@ end)
 --]]
 function stunPlayer(character: Model)
 	-- checks if character exists
-	if not character then warn("Can't stun, no character")  return end
+	if not character then
+		warn("Can't stun, no character")
+		return
+	end
 	-- Adds stunned attribute
 	character:SetAttribute("Stunned", true)
 
@@ -143,7 +143,6 @@ function stunPlayer(character: Model)
 	end)
 end
 
-
  -- Determines if a character is stunned by checking its "Stunned" attribute
 
 function amiStunned(character: Model)
@@ -157,12 +156,9 @@ function amiStunned(character: Model)
 	return isStunned
 end
 
-
 --> Blocking Logic <--
 
-
 -- Determines if a character is blocking by checking its "Blocking" attribute
-
 function amiBlocking(character : Model)
 	-- Checks blocking attribute
 	local isBlocking = character:GetAttribute("Blocking")
@@ -176,16 +172,21 @@ end
 
 
 --  Called when player attempts to block. Verifies conditions and sets Blocking attribute
-
 BlockEvent.OnServerEvent:Connect( function(player : Player)
 	-- finds character and humanoid
 	local character = player.Character
 	local humanoid = character:FindFirstChild("Humanoid")
 	-- Checks if the humanoid and character exist
-	if not character or not humanoid then warn("Values not found, will not block") return end
+	if not character or not humanoid then
+		warn("Values not found, will not block")
+		return
+	end
 	-- Checks if the blocking Attribute exists
 	local blockAttribute = character:GetAttribute("Blocking")
-	if blockAttribute == nil then warn("Attribute not found, blocking will not take place") return end
+	if blockAttribute == nil then
+		warn("Attribute not found, blocking will not take place")
+		return
+	end
 	-- Checks if the player is stunned and returns if so
 	if character:GetAttribute("Stunned") == true then print("Can't block while stunned") return end
 	-- Enables blocking attribute
@@ -196,22 +197,21 @@ end)
 
 
  -- Called when player stops blocking. Sets Blocking attribute to false
-
 UnblockEvent.OnServerEvent:Connect(function(player : Player)
 	-- Checks if character and attribute exists
 	local character = player.Character
 	local blockAttribute = character:GetAttribute("Blocking")
-	if not character or not blockAttribute then warn("Character not found, will not unblock") return end
+	if not character or not blockAttribute then
+		warn("Character not found, will not unblock")
+		return
+	end
 
 	character:SetAttribute("Blocking", false)
 end)
 
-
 --> Attack Logic <--
 
-
 --  Starts the attack sequence by calling the triggerAttack function
-
 AttackEvent.OnServerEvent:Connect(function(player, currentCombo, maxCombo)
 	return triggerAttack(player, currentCombo, maxCombo)
 end)
@@ -227,15 +227,25 @@ end)
 --]]
 function triggerAttack(player :Player, currentCombo, maxCombo)
 	-- Returns if player is over combo limit
-	if currentCombo >= maxCombo then warn("Can't attack yet") sendAttackProcessed(player, false) return end
+	if currentCombo >= maxCombo then
+		warn("Can't attack yet")
+		sendAttackProcessed(player, false)
+		return
+	end
 
 	-- Checks if the character exists for the player
 	local character = player.Character
 	local humanoid : Humanoid = character.Humanoid
 	local root : Part = character.HumanoidRootPart
-	if not character  or not humanoid or not root then sendAttackProcessed(player, false) return end
+	if not character  or not humanoid or not root then
+		sendAttackProcessed(player, false)
+		return
+	end
 	-- Checks if the player is already in an animation so they dont animation cancel or skip animations
-	if animationInProgress[player] then sendAttackProcessed(player, false)return end
+	if animationInProgress[player] then
+		sendAttackProcessed(player, false)
+		return
+	end
 	-- Checks if the player is blocking or is stunned as they should not beable to attack during these states
 	if amiStunned(character) or amiBlocking(character) then
 		sendAttackProcessed(player, false)
@@ -258,13 +268,14 @@ function triggerAttack(player :Player, currentCombo, maxCombo)
 	sendAttackProcessed(player, true)
 end
 
-
 --> Animation and Sound Logic <--
 
-
  -- Plays visual feedback on the enemy character
-
-function EnemyswingFeedback(enemyHumanoid, humanoid)
+function EnemyswingFeedback(enemyHumanoid)
+	if not enemyHumanoid then
+		warn("Feedback not applied, humanoid not found")
+		return
+	end
 	-- Plays swing anim
 	animHandler.PlayAnim(stunAnimations[math.random(1, #stunAnimations)], enemyHumanoid)
 	-- Plays hit sound
@@ -273,9 +284,7 @@ function EnemyswingFeedback(enemyHumanoid, humanoid)
 	VfxModule.PlayHitVFX(enemyHumanoid.Parent)
 end
 
- 
 --  Plays swing animation and sound for the attacking player
-
 function playSwingFeedback(player, humanoid)
 	-- Sets the value for when a Player is in an anim is true for the given player
 	animationInProgress[player] = true
@@ -292,9 +301,7 @@ function playSwingFeedback(player, humanoid)
 	end)
 end
 
-
 --> Knockback Logic <--
-
 
 --  Applies knockback to the enemy based on combo
 function applyKnockBack(enemyHumanoid, root, player)
@@ -310,11 +317,9 @@ function applyKnockBack(enemyHumanoid, root, player)
 	end
 end
 
-
 --> Hitbox Logic <--
 
 -- Finds all objects in a given part and damages their humanoid
-
 function hitBoxLogic(hitboxPart, player, character)
 	-- Grab dimenstions for Region3
 	local regionSize = hitboxPart.Size
@@ -339,7 +344,8 @@ function hitBoxLogic(hitboxPart, player, character)
 				processedParents[targetCharacter] = true
 				
 				-- Detramins damage output based on if the enemy is blocking or not
-				if not amiBlocking(enemyHumanoid.Parent) then
+				local isBlocking = amiBlocking(enemyHumanoid.Parent)
+				if not isBlocking then
 					-- Deals damage to enemy
 					enemyHumanoid:TakeDamage(damage)
 				else
@@ -351,14 +357,14 @@ function hitBoxLogic(hitboxPart, player, character)
 					applyKnockBack(enemyHumanoid, character.HumanoidRootPart, player)
 				end)
 				-- Plays feedback on the enemy such as VFX, SFX, and ANIMS
-				EnemyswingFeedback(enemyHumanoid, character)
+				EnemyswingFeedback(enemyHumanoid)
 				-- Stuns the enemy to prevent them from attacking mid combo
 				stunPlayer(targetCharacter)
 			end
 		end
 	end
+	processedParents = {}
 end
-
 
 --[[ 
 	getCharacterFromPart(part: BasePart)
@@ -379,9 +385,7 @@ function getCharacterFromPart(part)
 	return nil
 end
 
-
---> Create Hitbox Function <-- 
-
+--> Hitboxs <-- 
 
 --[[ 
 	createHitbox(root: Part)
@@ -391,41 +395,49 @@ end
 --]]
 
 function createHitbox(root)
+	if not root then
+		warn("Given root does not exist, Cant create hitbox")
+		return
+	end
+	
 	-- Gets location values for the hitbox
 	local lookVector = root.CFrame.LookVector
 	local attackDirection = lookVector * 2 -- Distance in front of the character
 	local attackPosition = root.Position + attackDirection
 
 	-- Create the part (hitbox) and set its position and rotation based on the character's look vector
-	local part = Instance.new("Part", workspace)
+	local part = Instance.new("Part")
+	part.Parent = workspace.ActiveHitboxes
 
 	-- Set the CFrame to position the hitbox in front of the character and rotate it accordingly
 	part.CFrame = CFrame.new(attackPosition, attackPosition + lookVector) -- Attack position + direction
 	-- Set values for the new part
-	part.Size = Vector3.new(11, 8, 6)
+	part.Size = HitboxSize
 	part.Anchored = true
 	part.CanCollide = false
 	part.Transparency = 0.7
 	part.Color = Color3.new(1, 0, 0.0156863)
 
 	return part
-end
-
--- Dash System 
+end 
 
 -- Dash System
 
 -- Adds force to player to create a dash
 DashEvent.OnServerEvent:Connect(function(player: Player)
 	-- Prevent dash spamming
-	if playerCanDash[player] == false then return end
+	if playerCanDash[player] == false then
+		return
+	end
 	playerCanDash[player] = false
 
 	-- Call dash cooldown indicator (e.g., UI dimming, cooldown bar)
 	startDashDB(player)
 
 	local character = player.Character
-	if not character then return end
+	if not character then
+		return
+	end
 
 	local humanoid = character:FindFirstChild("Humanoid")
 	local root = character:FindFirstChild("HumanoidRootPart")
@@ -436,23 +448,35 @@ DashEvent.OnServerEvent:Connect(function(player: Player)
 	end
 
 	-- Prevent dashing while stunned
-	if character:GetAttribute("Stunned") == true then return end
+	local isStunned = character:GetAttribute("Stunned")
+	if isStunned then
+		return
+	end
 
 	-- Play dash animation
 	animHandler.PlayAnim(slideAnim, humanoid)
-
-	-- Create the dash movement using BodyVelocity
-	local bodyVelocity = Instance.new("BodyVelocity")
-	bodyVelocity.Velocity = root.CFrame.LookVector * dashForce
-	bodyVelocity.MaxForce = Vector3.new(1, 0, 1) * 1e6 -- No vertical force
-	bodyVelocity.P = dashForce
-	bodyVelocity.Name = "DashVelocity"
-	bodyVelocity.Parent = root
+	
+	-- Make sure the HumanoidRootPart has an Attachment
+	local attachment = root:FindFirstChild("RootAttachment")
+	if not attachment then
+		attachment = Instance.new("Attachment")
+		attachment.Name = "RootAttachment"
+		attachment.Parent = root
+	end
+	
+	-- Create and configure the VectorForce
+	local vectorForce = Instance.new("VectorForce")
+	vectorForce.Name = "DashVelocity"
+	vectorForce.Force = root.CFrame.LookVector * dashForce
+	vectorForce.Attachment0 = attachment
+	vectorForce.ApplyAtCenterOfMass = true -- generally true for better physics behavior
+	vectorForce.RelativeTo = Enum.ActuatorRelativeTo.World -- or .Attachment0 if you want local force
+	vectorForce.Parent = root
 
 	-- Remove the force after dash ends
 	task.delay(dashLength, function()
-		if bodyVelocity and bodyVelocity.Parent then
-			bodyVelocity:Destroy()
+		if vectorForce and vectorForce.Parent then
+			vectorForce:Destroy()
 			task.wait(0.3)
 			animHandler.StopAnim(slideAnim, humanoid)
 		end
